@@ -1,0 +1,7 @@
+#chats > li {
+    list-style-type: none;
+}
+
+.message-list > li {
+    list-style-type: none;
+}
