@@ -4,7 +4,7 @@ use askama::Template;
 use axum::{debug_handler, extract::{Query, State}, response::{Html, IntoResponse}, routing::get, Form, Router};
 use serde::Deserialize;
 use tokio::sync::RwLock;
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::debug;
 
 mod templates;
@@ -32,7 +32,9 @@ struct ChatiplexState {
     base_url: BaseUrl,
 }
 
-pub fn chatiplex(url_prefix: impl Into<Arc<str>>) -> Router {
+pub fn chatiplex(url_prefix: impl Into<Arc<str>>, assets_dir: &str) -> Router {
+    let url_prefix = url_prefix.into();
+
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .try_init()
@@ -42,13 +44,16 @@ pub fn chatiplex(url_prefix: impl Into<Arc<str>>) -> Router {
 
     let state = ChatiplexState {
         chats: chats.clone(),
-        base_url: BaseUrl(url_prefix.into()),
+        base_url: BaseUrl(url_prefix.clone()),
     };
+
+    // print working directory for debugging purposes
+    debug!("Current working directory: {:?}", std::env::current_dir().unwrap());
 
     Router::new()
         .route("/", get(index))
         .route("/chats", get(get_chat).post(post_chat))
-        .nest_service("/assets", tower_http::services::ServeDir::new("assets"))
+        .nest_service("/assets", ServeDir::new(assets_dir))
         .with_state(state)
         .layer(TraceLayer::new_for_http())
 }

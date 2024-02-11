@@ -1,5 +1,4 @@
 
-use axum::Router;
 use chatiplex::chatiplex;
 use tracing::debug;
 
@@ -10,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .try_init()
         .ok();
 
-    let app = chatiplex("");
+    let app = chatiplex("", "assets");
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
     debug!("listening on {}", listener.local_addr().unwrap());
