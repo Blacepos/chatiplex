@@ -23,7 +23,16 @@ impl Chats {
     }
 }
 
-pub fn chatiplex() -> Router {
+#[derive(Clone)]
+struct BaseUrl(Arc<str>);
+
+#[derive(Clone)]
+struct ChatiplexState {
+    chats: Chats,
+    base_url: BaseUrl,
+}
+
+pub fn chatiplex(url_prefix: impl Into<Arc<str>>) -> Router {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .try_init()
@@ -31,16 +40,23 @@ pub fn chatiplex() -> Router {
 
     let chats = Chats::new();
 
+    let state = ChatiplexState {
+        chats: chats.clone(),
+        base_url: BaseUrl(url_prefix.into()),
+    };
+
     Router::new()
         .route("/", get(index))
         .route("/chats", get(get_chat).post(post_chat))
         .nest_service("/assets", tower_http::services::ServeDir::new("assets"))
-        .with_state(chats)
+        .with_state(state)
         .layer(TraceLayer::new_for_http())
 }
 
-async fn index() -> impl IntoResponse {
-    Html(include_str!("../assets/index.html"))
+async fn index(State(state): State<ChatiplexState>) -> impl IntoResponse {
+    Html(
+        templates::IndexTemplate { base_url: state.base_url.0.as_ref() }.render().unwrap()
+    )
 }
 
 #[derive(Deserialize, Debug)]
@@ -49,11 +65,11 @@ struct GetChatQuery {
 }
 
 async fn get_chat(
-    State(chats): State<Chats>,
+    State(state): State<ChatiplexState>,
     Query(input): Query<GetChatQuery>,
 ) -> impl IntoResponse
 {
-    match chats.0.read().await.get(&input.id) {
+    match state.chats.0.read().await.get(&input.id) {
         Some(chat) => Html(
             templates::ChatTemplate {
                 id: &chat.id,
@@ -75,17 +91,17 @@ struct PostChatForm {
 
 #[debug_handler]
 async fn post_chat(
-    State(chats): State<Chats>,
+    State(state): State<ChatiplexState>,
     Form(input): Form<PostChatForm>,
 ) -> impl IntoResponse
 {
     debug!("Form data: {:?}", input);
 
-    chats.0
+    state.chats.0
         .write().await
         .entry(input.id.clone())
         .or_insert(Chat { id: input.id.clone(), messages: Vec::new() })
         .messages.push(input.message);
 
-    get_chat(State(chats), Query(GetChatQuery { id: input.id })).await
+    get_chat(State(state), Query(GetChatQuery { id: input.id })).await
 }
